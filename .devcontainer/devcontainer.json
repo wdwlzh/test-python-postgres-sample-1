@@ -4,9 +4,6 @@
   "service": "backend",
   "workspaceFolder": "/workspaces",
   "shutdownAction": "stopCompose",
-  "features": {
-    "ghcr.io/devcontainers/features/node:1": {}
-  },
   "customizations": {
     "vscode": {
       "extensions": [
