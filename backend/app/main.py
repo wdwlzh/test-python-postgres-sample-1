@@ -106,8 +106,8 @@ def read_backtests(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
     return backtests
 
 # Function to fetch data from Alpha Vantage
-def fetch_alpha_vantage_data(symbol: str, api_key: str):
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
+def fetch_alpha_vantage_data(symbol: str, api_key: str, outputsize: str = "compact"):
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&outputsize={outputsize}&apikey={api_key}"
     response = requests.get(url)
     data = response.json()
     if "Time Series (Daily)" not in data:
@@ -128,7 +128,9 @@ def fetch_alpha_vantage_data(symbol: str, api_key: str):
 
 # Endpoint to fetch and store prices
 @app.post("/stocks/{symbol}/fetch-prices")
-def fetch_and_store_prices(symbol: str, db: Session = Depends(get_db)):
+def fetch_and_store_prices(symbol: str, outputsize: str = "compact", db: Session = Depends(get_db)):
+    if outputsize not in ["compact", "full"]:
+        raise HTTPException(status_code=400, detail="outputsize must be 'compact' or 'full'")
     api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
     if not api_key or api_key == "YOUR_API_KEY_HERE":
         raise HTTPException(status_code=400, detail="Alpha Vantage API key not set. Please update docker-compose.yml")
@@ -142,7 +144,7 @@ def fetch_and_store_prices(symbol: str, db: Session = Depends(get_db)):
         db.refresh(stock)
     
     # Fetch data
-    prices_data = fetch_alpha_vantage_data(symbol, api_key)
+    prices_data = fetch_alpha_vantage_data(symbol, api_key, outputsize)
     
     # Insert prices, skip if exists
     inserted_count = 0
