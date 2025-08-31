@@ -2,7 +2,7 @@
   "name": "Multi-Service Dev Container",
   "dockerComposeFile": "../docker-compose.yml",
   "service": "backend",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceFolder": "/workspaces",
   "shutdownAction": "stopCompose",
   "customizations": {
     "vscode": {
@@ -15,6 +15,5 @@
       ]
     }
   },
-  "postCreateCommand": "pip install -r backend/requirements.txt && cd frontend && npm install",
-  "remoteUser": "vscode"
+  "postCreateCommand": "pip install -r backend/requirements.txt && cd frontend && npm install && git config --global user.name \"${localEnv:GIT_USER_NAME:-Dev Container User}\" && git config --global user.email \"${localEnv:GIT_USER_EMAIL:-dev@container.local}\""
 }
