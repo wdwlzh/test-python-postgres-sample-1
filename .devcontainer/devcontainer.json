@@ -4,6 +4,9 @@
   "service": "backend",
   "workspaceFolder": "/workspaces",
   "shutdownAction": "stopCompose",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
   "customizations": {
     "vscode": {
       "extensions": [
@@ -15,5 +18,9 @@
       ]
     }
   },
-  "postCreateCommand": "pip install -r backend/requirements.txt && cd frontend && npm install && git config --global user.name \"${localEnv:GIT_USER_NAME:-Dev Container User}\" && git config --global user.email \"${localEnv:GIT_USER_EMAIL:-dev@container.local}\""
+  "containerEnv": {
+    "GIT_USER_NAME": "wdwlzh",
+    "GIT_USER_EMAIL": "wdwlzh2024@gmail.com"
+  },
+  "postCreateCommand": "pip install -r backend/requirements.txt && cd frontend && npm install && git config --global user.name \"$GIT_USER_NAME\" && git config --global user.email \"$GIT_USER_EMAIL\""
 }
