@@ -6,6 +6,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Configure git
+RUN git config --global user.name "wdwlzh" && \
+    git config --global user.email "wdwlzh2024@gmail.com"
+
 # Install Node.js for frontend development
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
