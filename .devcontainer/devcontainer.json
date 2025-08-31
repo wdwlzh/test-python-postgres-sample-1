@@ -20,5 +20,5 @@
     "GIT_USER_NAME": "wdwlzh",
     "GIT_USER_EMAIL": "wdwlzh2024@gmail.com"
   },
-  "postCreateCommand": "pip install -r backend/requirements.txt && cd frontend && npm install && git config --global user.name \"$GIT_USER_NAME\" && git config --global user.email \"$GIT_USER_EMAIL\""
+  "postCreateCommand": "pip install -r backend/requirements.txt && cd frontend && npm install && git config --global user.name 'wdwlzh' && git config --global user.email 'wdwlzh2024@gmail.com'"
 }
