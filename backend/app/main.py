@@ -7,6 +7,7 @@ from typing import List, Optional
 from datetime import date
 import requests
 import os
+from .backtest import BacktestEngine, STRATEGIES
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -104,6 +105,108 @@ def create_backtest(backtest: BacktestCreate, db: Session = Depends(get_db)):
 def read_backtests(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     backtests = db.query(Backtest).offset(skip).limit(limit).all()
     return backtests
+
+# Function to fetch data from Alpha Vantage
+def fetch_alpha_vantage_data(symbol: str, api_key: str, outputsize: str = "compact"):
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&outputsize={outputsize}&apikey={api_key}"
+    response = requests.get(url)
+    data = response.json()
+    if "Time Series (Daily)" not in data:
+        raise HTTPException(status_code=400, detail=f"Error fetching data: {data.get('Error Message', 'Unknown error')}")
+    time_series = data["Time Series (Daily)"]
+    prices = []
+    for date_str, daily_data in time_series.items():
+        price = {
+            "date": date_str,
+            "open": float(daily_data["1. open"]),
+            "high": float(daily_data["2. high"]),
+            "low": float(daily_data["3. low"]),
+            "close": float(daily_data["4. close"]),
+            "volume": int(daily_data["5. volume"])
+        }
+        prices.append(price)
+    return prices
+
+# Endpoint to fetch and store prices
+@app.post("/stocks/{symbol}/fetch-prices")
+def fetch_and_store_prices(symbol: str, outputsize: str = "compact", db: Session = Depends(get_db)):
+    if outputsize not in ["compact", "full"]:
+        raise HTTPException(status_code=400, detail="outputsize must be 'compact' or 'full'")
+    api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+    if not api_key or api_key == "YOUR_API_KEY_HERE":
+        raise HTTPException(status_code=400, detail="Alpha Vantage API key not set. Please update docker-compose.yml")
+    
+    # Check if stock exists, if not create
+    stock = db.query(Stock).filter(Stock.symbol == symbol.upper()).first()
+    if not stock:
+        stock = Stock(symbol=symbol.upper())
+        db.add(stock)
+        db.commit()
+        db.refresh(stock)
+    
+    # Fetch data
+    prices_data = fetch_alpha_vantage_data(symbol, api_key, outputsize)
+    
+    # Insert prices, skip if exists
+    inserted_count = 0
+    for p in prices_data:
+        existing = db.query(Price).filter(Price.stock_id == stock.id, Price.date == p["date"]).first()
+        if not existing:
+            price = Price(
+                stock_id=stock.id,
+                date=p["date"],
+                open_price=p["open"],
+                high=p["high"],
+                low=p["low"],
+                close=p["close"],
+                volume=p["volume"]
+            )
+            db.add(price)
+            inserted_count += 1
+    db.commit()
+    return {"message": f"Fetched {len(prices_data)} prices, inserted {inserted_count} new records for {symbol}"}
+
+# Endpoint to run a backtest
+@app.post("/backtests/run")
+def run_backtest(
+    symbol: str,
+    strategy_name: str,
+    start_date: date,
+    end_date: date,
+    initial_cash: float = 10000,
+    db: Session = Depends(get_db)
+):
+    try:
+        if strategy_name not in STRATEGIES:
+            raise HTTPException(status_code=400, detail=f"Strategy '{strategy_name}' not found. Available: {list(STRATEGIES.keys())}")
+        
+        strategy_class = STRATEGIES[strategy_name]
+        strategy = strategy_class()
+        
+        engine = BacktestEngine(strategy, symbol, start_date, end_date, initial_cash)
+        result = engine.run(db)
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        # Save to database
+        backtest = Backtest(
+            name=f"{strategy_name} on {symbol} ({start_date} to {end_date})",
+            strategy=strategy_name,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_cash,
+            final_capital=result["final_cash"]
+        )
+        db.add(backtest)
+        db.commit()
+        db.refresh(backtest)
+        
+        result["backtest_id"] = backtest.id
+        return result
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Function to fetch data from Alpha Vantage
 def fetch_alpha_vantage_data(symbol: str, api_key: str, outputsize: str = "compact"):

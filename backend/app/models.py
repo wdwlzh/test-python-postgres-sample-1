@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Date, DECIMAL, BIGINT, TIMESTAMP, Text, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy import text
 from .database import Base
 
 class Stock(Base):
@@ -35,4 +36,4 @@ class Backtest(Base):
     end_date = Column(Date)
     initial_capital = Column(DECIMAL(15, 2))
     final_capital = Column(DECIMAL(15, 2))
-    created_at = Column(TIMESTAMP, default="CURRENT_TIMESTAMP")
+    created_at = Column(TIMESTAMP, default=text('CURRENT_TIMESTAMP'))
