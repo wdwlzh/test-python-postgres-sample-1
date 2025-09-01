@@ -7,7 +7,8 @@ from typing import List, Optional
 from datetime import date
 import requests
 import os
-from .backtest import BacktestEngine, STRATEGIES
+from .backtest import BacktestEngine
+from .strategies import STRATEGIES
 
 # Create tables
 Base.metadata.create_all(bind=engine)
