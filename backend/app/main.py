@@ -9,9 +9,14 @@ import requests
 import os
 from .backtest import BacktestEngine
 from .strategies import STRATEGIES
+from .ema_backtester import EMABacktester
 
 # Create tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Warning: Could not create tables: {e}")
+    print("Make sure the database is running.")
 
 app = FastAPI(title="My FastAPI App", version="1.0.0")
 
@@ -207,6 +212,101 @@ def run_backtest(
         return result
     except Exception as e:
         db.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")# Endpoint to run EMA backtests for multiple combinations
+@app.post("/ema-backtests/run")
+def run_ema_backtests(
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    initial_cash: float = 10000,
+    short_periods: Optional[List[int]] = None,
+    long_periods: Optional[List[int]] = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        # Validate inputs
+        if initial_cash <= 0:
+            raise HTTPException(status_code=400, detail="Initial cash must be positive")
+        if start_date >= end_date:
+            raise HTTPException(status_code=400, detail="Start date must be before end date")
+        
+        # If no periods provided, use defaults
+        if short_periods is None:
+            short_periods = list(range(5, 61, 5))  # 5, 10, 15, ..., 60
+        if long_periods is None:
+            long_periods = list(range(10, 121, 5))  # 10, 15, 20, ..., 120
+        
+        # Validate that we have at least some periods to test
+        if not short_periods or not long_periods:
+            raise HTTPException(
+                status_code=400, 
+                detail="Both short_periods and long_periods must be non-empty lists"
+            )
+        
+        backtester = EMABacktester(symbol, start_date, end_date, initial_cash)
+        results = backtester.run_combinations(db, short_periods, long_periods)
+        
+        return {
+            "message": f"Successfully ran {len(results)} EMA backtests for {symbol}",
+            "symbol": symbol,
+            "date_range": f"{start_date} to {end_date}",
+            "initial_cash": initial_cash,
+            "total_combinations": len(results),
+            "results": results
+        }
+        
+    except ValueError as e:
+        # Handle validation errors from EMABacktester
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+# Endpoint to get the best EMA combination
+@app.get("/ema-backtests/best")
+def get_best_ema_combination(
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    initial_cash: float = 10000,
+    metric: str = "total_return_percent",
+    db: Session = Depends(get_db)
+):
+    try:
+        backtester = EMABacktester(symbol, start_date, end_date, initial_cash)
+        best = backtester.get_best_combination(db, metric)
+        if not best:
+            raise HTTPException(status_code=404, detail="No backtest results found for the specified criteria")
+        
+        return {
+            "symbol": best.symbol,
+            "short_period": best.short_period,
+            "long_period": best.long_period,
+            "start_date": str(best.start_date),
+            "end_date": str(best.end_date),
+            "initial_cash": float(best.initial_cash),
+            "final_cash": float(best.final_cash),
+            "total_return": float(best.total_return),
+            "total_return_percent": float(best.total_return_percent),
+            "optimized_for": metric
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+# Endpoint to get EMA combination summary
+@app.get("/ema-backtests/summary")
+def get_ema_combination_summary(
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    initial_cash: float = 10000,
+    db: Session = Depends(get_db)
+):
+    try:
+        backtester = EMABacktester(symbol, start_date, end_date, initial_cash)
+        summary = backtester.get_combination_summary(db)
+        return summary
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Function to fetch data from Alpha Vantage
