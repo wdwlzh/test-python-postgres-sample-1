@@ -11,6 +11,7 @@ class Stock(Base):
     name = Column(String(255))
 
     prices = relationship("Price", back_populates="stock")
+    adjusted_prices = relationship("AdjustedPrice", back_populates="stock")
 
 class Price(Base):
     __tablename__ = "prices"
@@ -40,6 +41,27 @@ class EMABacktest(Base):
     total_return = Column(DECIMAL(15, 4), nullable=False)
     total_return_percent = Column(DECIMAL(15, 4), nullable=False)
     created_at = Column(TIMESTAMP, default=text('CURRENT_TIMESTAMP'))
+
+class AdjustedPrice(Base):
+    __tablename__ = "adjusted_prices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    close = Column(DECIMAL(10, 4))
+    high = Column(DECIMAL(10, 4))
+    low = Column(DECIMAL(10, 4))
+    open = Column(DECIMAL(10, 4))
+    volume = Column(BIGINT)
+    adj_close = Column(DECIMAL(10, 4))
+    adj_high = Column(DECIMAL(10, 4))
+    adj_low = Column(DECIMAL(10, 4))
+    adj_open = Column(DECIMAL(10, 4))
+    adj_volume = Column(BIGINT)
+    div_cash = Column(DECIMAL(10, 4))
+    split_factor = Column(DECIMAL(10, 4))
+
+    stock = relationship("Stock", back_populates="adjusted_prices")
 
 class Backtest(Base):
     __tablename__ = "backtests"
