@@ -3,7 +3,7 @@ from ..models import Price
 from typing import List, Optional
 
 class EMACrossoverStrategy(Strategy):
-    def __init__(self, short_period: int = 5, long_period: int = 25):
+    def __init__(self, short_period: int = 5, long_period: int = 10):
         self.short_period = short_period
         self.long_period = long_period
 
