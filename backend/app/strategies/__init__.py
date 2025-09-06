@@ -11,8 +11,10 @@ class Strategy:
         return False
 
 from .buy_and_hold import BuyAndHoldStrategy
+from .ema_crossover import EMACrossoverStrategy
 
 # Strategy registry
 STRATEGIES = {
-    "buy_and_hold": BuyAndHoldStrategy
+    "buy_and_hold": BuyAndHoldStrategy,
+    "ema_crossover": EMACrossoverStrategy
 }

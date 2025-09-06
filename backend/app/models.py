@@ -26,12 +26,27 @@ class Price(Base):
 
     stock = relationship("Stock", back_populates="prices")
 
+class EMABacktest(Base):
+    __tablename__ = "ema_backtests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(10), nullable=False)
+    short_period = Column(Integer, nullable=False)
+    long_period = Column(Integer, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    initial_cash = Column(DECIMAL(15, 2), nullable=False)
+    final_cash = Column(DECIMAL(15, 2), nullable=False)
+    total_return = Column(DECIMAL(15, 4), nullable=False)
+    total_return_percent = Column(DECIMAL(15, 4), nullable=False)
+    created_at = Column(TIMESTAMP, default=text('CURRENT_TIMESTAMP'))
+
 class Backtest(Base):
     __tablename__ = "backtests"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
-    strategy = Column(Text)
+    strategy = Column(String(100))
     start_date = Column(Date)
     end_date = Column(Date)
     initial_capital = Column(DECIMAL(15, 2))
