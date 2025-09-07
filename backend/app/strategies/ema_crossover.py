@@ -1,5 +1,5 @@
 from . import Strategy
-from ..models import Price
+from ..models import AdjustedPrice
 from typing import List, Optional
 
 class EMACrossoverStrategy(Strategy):
@@ -7,7 +7,7 @@ class EMACrossoverStrategy(Strategy):
         self.short_period = short_period
         self.long_period = long_period
 
-    def should_buy(self, prices: List[Price], current_position: int, current_cash: float) -> bool:
+    def should_buy(self, prices: List[AdjustedPrice], current_position: int, current_cash: float) -> bool:
         if current_position > 0 or len(prices) < self.long_period + 1:
             return False
 
@@ -22,7 +22,7 @@ class EMACrossoverStrategy(Strategy):
             return True
         return False
 
-    def should_sell(self, prices: List[Price], current_position: int, current_cash: float) -> bool:
+    def should_sell(self, prices: List[AdjustedPrice], current_position: int, current_cash: float) -> bool:
         if current_position == 0 or len(prices) < self.long_period + 1:
             return False
 
@@ -37,11 +37,12 @@ class EMACrossoverStrategy(Strategy):
             return True
         return False
 
-    def _calculate_ema(self, prices: List[Price], period: int) -> Optional[List[float]]:
+    def _calculate_ema(self, prices: List[AdjustedPrice], period: int) -> Optional[List[float]]:
         if len(prices) < period:
             return None
 
-        close_prices = [float(p.close) for p in prices]
+        # Use adjusted close prices for EMA calculation
+        close_prices = [float(p.adj_close) for p in prices]
         ema = []
         multiplier = 2 / (period + 1)
 

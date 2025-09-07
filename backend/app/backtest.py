@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from .models import Stock, Price, Backtest
+from .models import Stock, AdjustedPrice, Backtest
 from .strategies import Strategy
 from datetime import date
 from typing import List, Dict, Any
@@ -26,27 +26,27 @@ class BacktestEngine:
 
             if self.strategy.should_buy(current_prices, position, cash):
                 if cash > 0:
-                    shares = int(cash // float(price.open_price))
+                    shares = int(cash // float(price.adj_open))
                     if shares > 0:
-                        cash -= shares * float(price.open_price)
+                        cash -= shares * float(price.adj_open)
                         position += shares
                         trades.append({
                             'date': price.date.isoformat(),
                             'action': 'buy',
                             'shares': shares,
-                            'price': float(price.open_price),
+                            'price': float(price.adj_open),
                             'cash_after': cash,
                             'position_after': position
                         })
 
             if self.strategy.should_sell(current_prices, position, cash):
                 if position > 0:
-                    cash += position * float(price.close)
+                    cash += position * float(price.adj_close)
                     trades.append({
                         'date': price.date.isoformat(),
                         'action': 'sell',
                         'shares': position,
-                        'price': float(price.close),
+                        'price': float(price.adj_close),
                         'cash_after': cash,
                         'position_after': 0
                     })
@@ -54,12 +54,12 @@ class BacktestEngine:
 
         # Sell any remaining position at the end
         if position > 0:
-            cash += position * float(prices[-1].close)
+            cash += position * float(prices[-1].adj_close)
             trades.append({
                 'date': prices[-1].date.isoformat(),
                 'action': 'sell',
                 'shares': position,
-                'price': float(prices[-1].close),
+                'price': float(prices[-1].adj_close),
                 'cash_after': cash,
                 'position_after': 0
             })
@@ -80,13 +80,13 @@ class BacktestEngine:
             'num_trades': len(trades)
         }
 
-    def _get_prices(self, db: Session) -> List[Price]:
+    def _get_prices(self, db: Session) -> List[AdjustedPrice]:
         stock = db.query(Stock).filter(Stock.symbol == self.symbol.upper()).first()
         if not stock:
             return []
-        prices = db.query(Price).filter(
-            Price.stock_id == stock.id,
-            Price.date >= self.start_date,
-            Price.date <= self.end_date
-        ).order_by(Price.date).all()
+        prices = db.query(AdjustedPrice).filter(
+            AdjustedPrice.stock_id == stock.id,
+            AdjustedPrice.date >= self.start_date,
+            AdjustedPrice.date <= self.end_date
+        ).order_by(AdjustedPrice.date).all()
         return prices

@@ -1,12 +1,12 @@
-from ..models import Price
+from ..models import AdjustedPrice
 from typing import List
 
 class Strategy:
-    def should_buy(self, prices: List[Price], current_position: int, current_cash: float) -> bool:
+    def should_buy(self, prices: List[AdjustedPrice], current_position: int, current_cash: float) -> bool:
         """Decide whether to buy based on current data and state."""
         return False
 
-    def should_sell(self, prices: List[Price], current_position: int, current_cash: float) -> bool:
+    def should_sell(self, prices: List[AdjustedPrice], current_position: int, current_cash: float) -> bool:
         """Decide whether to sell based on current data and state."""
         return False
 
