@@ -111,14 +111,7 @@ class EMABacktester:
     def run_single_combination(self, db: Session, short_period: int, long_period: int) -> Optional[dict]:
         """
         Run backtest for a single EMA combination.
-        
-        Args:
-            db: Database session
-            short_period: Short EMA period
-            long_period: Long EMA period
-            
-        Returns:
-            Dictionary with backtest results or None if error
+        Stores num_trades and CAGR in the database.
         """
         try:
             strategy = EMACrossoverStrategy(short_period=short_period, long_period=long_period)
@@ -128,6 +121,17 @@ class EMABacktester:
             if "error" in result:
                 print(f"Error for EMA {short_period}/{long_period} on {self.symbol}: {result['error']}")
                 return None
+
+            # Calculate number of trades
+            num_trades = result.get("num_trades")
+            if num_trades is None and "trades" in result:
+                num_trades = len(result["trades"])
+
+            # Calculate CAGR
+            years = (self.end_date - self.start_date).days / 365.25
+            cagr = None
+            if years > 0 and float(self.initial_cash) > 0 and float(result["final_cash"]) > 0:
+                cagr = (float(result["final_cash"]) / float(self.initial_cash)) ** (1 / years) - 1
 
             # Create database record
             ema_backtest = EMABacktest(
@@ -139,7 +143,9 @@ class EMABacktester:
                 initial_cash=self.initial_cash,
                 final_cash=result["final_cash"],
                 total_return=result["total_return"],
-                total_return_percent=result["total_return_percent"]
+                total_return_percent=result["total_return_percent"],
+                num_trades=num_trades,
+                cagr=cagr
             )
             db.add(ema_backtest)
             db.commit()
@@ -156,6 +162,8 @@ class EMABacktester:
                 "final_cash": float(result["final_cash"]),
                 "total_return": float(result["total_return"]),
                 "total_return_percent": float(result["total_return_percent"]),
+                "num_trades": num_trades,
+                "cagr": cagr,
                 "backtest_id": ema_backtest.id
             })
 

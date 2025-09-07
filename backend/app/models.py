@@ -40,6 +40,8 @@ class EMABacktest(Base):
     final_cash = Column(DECIMAL(15, 2), nullable=False)
     total_return = Column(DECIMAL(15, 4), nullable=False)
     total_return_percent = Column(DECIMAL(15, 4), nullable=False)
+    num_trades = Column(Integer, nullable=True)
+    cagr = Column(DECIMAL(10, 6), nullable=True)
     created_at = Column(TIMESTAMP, default=text('CURRENT_TIMESTAMP'))
 
 class AdjustedPrice(Base):
