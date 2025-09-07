@@ -12,8 +12,8 @@ class EMABacktester:
     
     This class:
     1. Tests EMA crossover strategy for a given symbol with different short and long EMA combinations
-    2. Ensures short and long EMAs are always multiples of 5
-    3. Restricts short periods to max 60 and long periods to max 120
+    2. Short periods range from 3 to 20
+    3. Long periods range from 10 to 60
     4. Records comprehensive backtest results in the database
     """
     
@@ -47,20 +47,20 @@ class EMABacktester:
         Generate all valid EMA period combinations.
         
         Args:
-            short_periods: List of short EMA periods (multiples of 5, max 60)
-            long_periods: List of long EMA periods (multiples of 5, max 120)
+            short_periods: List of short EMA periods (3 to 20)
+            long_periods: List of long EMA periods (10 to 60)
             
         Returns:
             List of (short_period, long_period) tuples
         """
         if short_periods is None:
-            short_periods = list(range(5, 61, 5))  # 5, 10, 15, ..., 60
+            short_periods = list(range(3, 21))  # 3, 4, 5, ..., 20
         if long_periods is None:
-            long_periods = list(range(10, 121, 5))  # 10, 15, 20, ..., 120
+            long_periods = list(range(10, 61))  # 10, 11, 12, ..., 60
 
-        # Validate and filter periods to multiples of 5
-        short_periods = self._validate_periods(short_periods, max_period=60, period_type="short")
-        long_periods = self._validate_periods(long_periods, max_period=120, period_type="long")
+        # Validate and filter periods
+        short_periods = self._validate_periods(short_periods, max_period=20, period_type="short")
+        long_periods = self._validate_periods(long_periods, max_period=60, period_type="long")
 
         # Generate valid combinations (short < long)
         combinations = []
@@ -72,7 +72,7 @@ class EMABacktester:
 
     def _validate_periods(self, periods: List[int], max_period: int, period_type: str) -> List[int]:
         """
-        Validate that periods are multiples of 5 and within limits.
+        Validate that periods are positive integers within limits.
         
         Args:
             periods: List of periods to validate
@@ -89,9 +89,6 @@ class EMABacktester:
             if not isinstance(period, int) or period <= 0:
                 invalid_periods.append(f"{period} (must be positive integer)")
                 continue
-            if period % 5 != 0:
-                invalid_periods.append(f"{period} (must be multiple of 5)")
-                continue
             if period > max_period:
                 invalid_periods.append(f"{period} (exceeds max {max_period})")
                 continue
@@ -102,8 +99,11 @@ class EMABacktester:
         
         if not validated:
             error_msg = f"No valid {period_type} periods provided. "
-            error_msg += f"Valid periods must be multiples of 5, positive, and ≤ {max_period}. "
-            error_msg += f"Examples: 5, 10, 15, 20, 25, 30, etc."
+            error_msg += f"Valid periods must be positive integers ≤ {max_period}. "
+            if period_type == "short":
+                error_msg += f"Examples: 3, 4, 5, 6, 7, 8, etc. (up to {max_period})"
+            else:
+                error_msg += f"Examples: 10, 11, 12, 13, 14, 15, etc. (up to {max_period})"
             raise ValueError(error_msg)
         
         return sorted(validated)

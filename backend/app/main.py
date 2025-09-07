@@ -298,9 +298,9 @@ def run_ema_backtests(
         
         # If no periods provided, use defaults
         if short_periods is None:
-            short_periods = list(range(5, 61, 5))  # 5, 10, 15, ..., 60
+            short_periods = list(range(3, 21))  # 3, 4, 5, ..., 20
         if long_periods is None:
-            long_periods = list(range(10, 121, 5))  # 10, 15, 20, ..., 120
+            long_periods = list(range(10, 61))  # 10, 11, 12, ..., 60
         
         # Validate that we have at least some periods to test
         if not short_periods or not long_periods:
