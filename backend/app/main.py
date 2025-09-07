@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .database import SessionLocal, engine, get_db
-from .models import Base, Stock, Price, Backtest
+from .models import Base, Stock, Price, Backtest, AdjustedPrice
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 import requests
 import os
 from .backtest import BacktestEngine
@@ -51,6 +51,40 @@ class BacktestCreate(BaseModel):
 class BacktestResponse(BacktestCreate):
     id: int
     created_at: Optional[str] = None
+
+class AdjustedPriceCreate(BaseModel):
+    stock_id: int
+    date: date
+    close: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    open: Optional[float] = None
+    volume: Optional[int] = None
+    adj_close: Optional[float] = None
+    adj_high: Optional[float] = None
+    adj_low: Optional[float] = None
+    adj_open: Optional[float] = None
+    adj_volume: Optional[int] = None
+    div_cash: Optional[float] = None
+    split_factor: Optional[float] = None
+
+class AdjustedPriceResponse(AdjustedPriceCreate):
+    id: int
+
+class TiingoAdjustedPriceResponse(BaseModel):
+    date: str
+    close: float
+    high: float
+    low: float
+    open: float
+    volume: int
+    adjClose: float
+    adjHigh: float
+    adjLow: float
+    adjOpen: float
+    adjVolume: int
+    divCash: float
+    splitFactor: float
 
 @app.get("/")
 async def root():
@@ -111,6 +145,38 @@ def create_backtest(backtest: BacktestCreate, db: Session = Depends(get_db)):
 def read_backtests(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     backtests = db.query(Backtest).offset(skip).limit(limit).all()
     return backtests
+
+# Function to fetch adjusted data from Tiingo
+def fetch_tiingo_adjusted_data(symbol: str, api_key: str, start_date: Optional[str] = None):
+    url = f"https://api.tiingo.com/tiingo/daily/{symbol}/prices"
+    params = {
+        "token": api_key
+    }
+    
+    # Only add startDate if provided
+    if start_date:
+        params["startDate"] = start_date
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.get(url, params=params, headers=headers)
+    
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Error fetching data from Tiingo: {response.status_code} - {response.text}"
+        )
+    
+    data = response.json()
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unexpected response format from Tiingo API: {data}"
+        )
+    
+    return data
 
 # Function to fetch data from Alpha Vantage
 def fetch_alpha_vantage_data(symbol: str, api_key: str, outputsize: str = "compact"):
@@ -232,9 +298,9 @@ def run_ema_backtests(
         
         # If no periods provided, use defaults
         if short_periods is None:
-            short_periods = list(range(5, 61, 5))  # 5, 10, 15, ..., 60
+            short_periods = list(range(3, 21))  # 3, 4, 5, ..., 20
         if long_periods is None:
-            long_periods = list(range(10, 121, 5))  # 10, 15, 20, ..., 120
+            long_periods = list(range(10, 61))  # 10, 11, 12, ..., 60
         
         # Validate that we have at least some periods to test
         if not short_periods or not long_periods:
@@ -308,6 +374,115 @@ def get_ema_combination_summary(
         return summary
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+# Adjusted Prices Endpoints
+@app.post("/stocks/{symbol}/fetch-adjusted-prices")
+def fetch_and_store_adjusted_prices(
+    symbol: str, 
+    start_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch adjusted historical price data from Tiingo API and save to database.
+    Example: /stocks/AAPL/fetch-adjusted-prices?start_date=2019-01-02
+    If start_date is not provided, fetches all available data.
+    """
+    api_key = os.getenv("TIINGO_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=400, 
+            detail="TIINGO_API_KEY environment variable not set"
+        )
+    
+    # Check if stock exists, if not create
+    stock = db.query(Stock).filter(Stock.symbol == symbol.upper()).first()
+    if not stock:
+        stock = Stock(symbol=symbol.upper())
+        db.add(stock)
+        db.commit()
+        db.refresh(stock)
+    
+    # Fetch data from Tiingo
+    try:
+        prices_data = fetch_tiingo_adjusted_data(symbol, api_key, start_date)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch data: {str(e)}")
+    
+    # Insert adjusted prices, skip if exists
+    inserted_count = 0
+    for price_data in prices_data:
+        # Parse the date string to a date object
+        date_str = price_data["date"][:10]  # Extract YYYY-MM-DD part
+        price_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        
+        existing = db.query(AdjustedPrice).filter(
+            AdjustedPrice.stock_id == stock.id, 
+            AdjustedPrice.date == price_date
+        ).first()
+        
+        if not existing:
+            adjusted_price = AdjustedPrice(
+                stock_id=stock.id,
+                date=price_date,
+                close=price_data["close"],
+                high=price_data["high"],
+                low=price_data["low"],
+                open=price_data["open"],
+                volume=price_data["volume"],
+                adj_close=price_data["adjClose"],
+                adj_high=price_data["adjHigh"],
+                adj_low=price_data["adjLow"],
+                adj_open=price_data["adjOpen"],
+                adj_volume=price_data["adjVolume"],
+                div_cash=price_data["divCash"],
+                split_factor=price_data["splitFactor"]
+            )
+            db.add(adjusted_price)
+            inserted_count += 1
+    
+    db.commit()
+    response_data = {
+        "message": f"Fetched {len(prices_data)} adjusted prices, inserted {inserted_count} new records for {symbol}",
+        "symbol": symbol.upper(),
+        "total_fetched": len(prices_data),
+        "total_inserted": inserted_count
+    }
+    
+    # Only include start_date in response if it was provided
+    if start_date:
+        response_data["start_date"] = start_date
+    
+    return response_data
+
+@app.get("/stocks/{symbol}/adjusted-prices", response_model=List[AdjustedPriceResponse])
+def get_adjusted_prices(
+    symbol: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    Get adjusted prices for a symbol with optional date filtering.
+    """
+    # Find the stock
+    stock = db.query(Stock).filter(Stock.symbol == symbol.upper()).first()
+    if not stock:
+        raise HTTPException(status_code=404, detail="Stock not found")
+    
+    # Build query
+    query = db.query(AdjustedPrice).filter(AdjustedPrice.stock_id == stock.id)
+    
+    if start_date:
+        query = query.filter(AdjustedPrice.date >= start_date)
+    if end_date:
+        query = query.filter(AdjustedPrice.date <= end_date)
+    
+    # Order by date descending and apply pagination
+    adjusted_prices = query.order_by(AdjustedPrice.date.desc()).offset(skip).limit(limit).all()
+    
+    return adjusted_prices
 
 # Function to fetch data from Alpha Vantage
 def fetch_alpha_vantage_data(symbol: str, api_key: str, outputsize: str = "compact"):

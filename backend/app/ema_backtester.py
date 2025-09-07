@@ -12,8 +12,8 @@ class EMABacktester:
     
     This class:
     1. Tests EMA crossover strategy for a given symbol with different short and long EMA combinations
-    2. Ensures short and long EMAs are always multiples of 5
-    3. Restricts short periods to max 60 and long periods to max 120
+    2. Short periods range from 3 to 20
+    3. Long periods range from 10 to 60
     4. Records comprehensive backtest results in the database
     """
     
@@ -47,20 +47,20 @@ class EMABacktester:
         Generate all valid EMA period combinations.
         
         Args:
-            short_periods: List of short EMA periods (multiples of 5, max 60)
-            long_periods: List of long EMA periods (multiples of 5, max 120)
+            short_periods: List of short EMA periods (3 to 20)
+            long_periods: List of long EMA periods (10 to 60)
             
         Returns:
             List of (short_period, long_period) tuples
         """
         if short_periods is None:
-            short_periods = list(range(5, 61, 5))  # 5, 10, 15, ..., 60
+            short_periods = list(range(3, 21))  # 3, 4, 5, ..., 20
         if long_periods is None:
-            long_periods = list(range(10, 121, 5))  # 10, 15, 20, ..., 120
+            long_periods = list(range(10, 61))  # 10, 11, 12, ..., 60
 
-        # Validate and filter periods to multiples of 5
-        short_periods = self._validate_periods(short_periods, max_period=60, period_type="short")
-        long_periods = self._validate_periods(long_periods, max_period=120, period_type="long")
+        # Validate and filter periods
+        short_periods = self._validate_periods(short_periods, max_period=20, period_type="short")
+        long_periods = self._validate_periods(long_periods, max_period=60, period_type="long")
 
         # Generate valid combinations (short < long)
         combinations = []
@@ -72,7 +72,7 @@ class EMABacktester:
 
     def _validate_periods(self, periods: List[int], max_period: int, period_type: str) -> List[int]:
         """
-        Validate that periods are multiples of 5 and within limits.
+        Validate that periods are positive integers within limits.
         
         Args:
             periods: List of periods to validate
@@ -89,9 +89,6 @@ class EMABacktester:
             if not isinstance(period, int) or period <= 0:
                 invalid_periods.append(f"{period} (must be positive integer)")
                 continue
-            if period % 5 != 0:
-                invalid_periods.append(f"{period} (must be multiple of 5)")
-                continue
             if period > max_period:
                 invalid_periods.append(f"{period} (exceeds max {max_period})")
                 continue
@@ -102,8 +99,11 @@ class EMABacktester:
         
         if not validated:
             error_msg = f"No valid {period_type} periods provided. "
-            error_msg += f"Valid periods must be multiples of 5, positive, and ≤ {max_period}. "
-            error_msg += f"Examples: 5, 10, 15, 20, 25, 30, etc."
+            error_msg += f"Valid periods must be positive integers ≤ {max_period}. "
+            if period_type == "short":
+                error_msg += f"Examples: 3, 4, 5, 6, 7, 8, etc. (up to {max_period})"
+            else:
+                error_msg += f"Examples: 10, 11, 12, 13, 14, 15, etc. (up to {max_period})"
             raise ValueError(error_msg)
         
         return sorted(validated)
@@ -111,14 +111,7 @@ class EMABacktester:
     def run_single_combination(self, db: Session, short_period: int, long_period: int) -> Optional[dict]:
         """
         Run backtest for a single EMA combination.
-        
-        Args:
-            db: Database session
-            short_period: Short EMA period
-            long_period: Long EMA period
-            
-        Returns:
-            Dictionary with backtest results or None if error
+        Stores num_trades and CAGR in the database.
         """
         try:
             strategy = EMACrossoverStrategy(short_period=short_period, long_period=long_period)
@@ -128,6 +121,17 @@ class EMABacktester:
             if "error" in result:
                 print(f"Error for EMA {short_period}/{long_period} on {self.symbol}: {result['error']}")
                 return None
+
+            # Calculate number of trades
+            num_trades = result.get("num_trades")
+            if num_trades is None and "trades" in result:
+                num_trades = len(result["trades"])
+
+            # Calculate CAGR
+            years = (self.end_date - self.start_date).days / 365.25
+            cagr = None
+            if years > 0 and float(self.initial_cash) > 0 and float(result["final_cash"]) > 0:
+                cagr = (float(result["final_cash"]) / float(self.initial_cash)) ** (1 / years) - 1
 
             # Create database record
             ema_backtest = EMABacktest(
@@ -139,7 +143,9 @@ class EMABacktester:
                 initial_cash=self.initial_cash,
                 final_cash=result["final_cash"],
                 total_return=result["total_return"],
-                total_return_percent=result["total_return_percent"]
+                total_return_percent=result["total_return_percent"],
+                num_trades=num_trades,
+                cagr=cagr
             )
             db.add(ema_backtest)
             db.commit()
@@ -156,6 +162,8 @@ class EMABacktester:
                 "final_cash": float(result["final_cash"]),
                 "total_return": float(result["total_return"]),
                 "total_return_percent": float(result["total_return_percent"]),
+                "num_trades": num_trades,
+                "cagr": cagr,
                 "backtest_id": ema_backtest.id
             })
 
