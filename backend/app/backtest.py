@@ -21,42 +21,49 @@ class BacktestEngine:
         position = 0
         trades = []
 
-        for i, price in enumerate(prices):
+        # Iterate through prices, but leave last day for potential execution
+        for i, price in enumerate(prices[:-1]):  # Stop one day before the end
             current_prices = prices[:i+1]
+            next_day_price = prices[i+1]  # Next day for execution
 
+            # Check buy signal based on current day's data, execute at next day's open
             if self.strategy.should_buy(current_prices, position, cash):
                 if cash > 0:
-                    shares = int(cash // float(price.adj_open))
+                    shares = int(cash // float(next_day_price.adj_open))
                     if shares > 0:
-                        cash -= shares * float(price.adj_open)
+                        cash -= shares * float(next_day_price.adj_open)
                         position += shares
                         trades.append({
-                            'date': price.date.isoformat(),
+                            'date': next_day_price.date.isoformat(),  # Execution date
+                            'signal_date': price.date.isoformat(),    # Signal generation date
                             'action': 'buy',
                             'shares': shares,
-                            'price': float(price.adj_open),
+                            'price': float(next_day_price.adj_open),
                             'cash_after': cash,
                             'position_after': position
                         })
 
+            # Check sell signal based on current day's data, execute at next day's open
             if self.strategy.should_sell(current_prices, position, cash):
                 if position > 0:
-                    cash += position * float(price.adj_close)
+                    cash += position * float(next_day_price.adj_open)
                     trades.append({
-                        'date': price.date.isoformat(),
+                        'date': next_day_price.date.isoformat(),  # Execution date
+                        'signal_date': price.date.isoformat(),    # Signal generation date
                         'action': 'sell',
                         'shares': position,
-                        'price': float(price.adj_close),
+                        'price': float(next_day_price.adj_open),
                         'cash_after': cash,
                         'position_after': 0
                     })
                     position = 0
 
-        # Sell any remaining position at the end
+        # Sell any remaining position at the end (last day close)
         if position > 0:
             cash += position * float(prices[-1].adj_close)
             trades.append({
                 'date': prices[-1].date.isoformat(),
+                'signal_date': prices[-1].date.isoformat(),
                 'action': 'sell',
                 'shares': position,
                 'price': float(prices[-1].adj_close),
