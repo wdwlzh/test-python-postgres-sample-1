@@ -261,9 +261,9 @@ def run_backtest(
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
         
-        # Save to database
+        # Save to database and save symbol to name property
         backtest = Backtest(
-            name=f"{strategy_name} on {symbol} ({start_date} to {end_date})",
+            name=symbol.upper(),
             strategy=strategy_name,
             start_date=start_date,
             end_date=end_date,
